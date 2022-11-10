@@ -40,6 +40,14 @@ async function main() {
         amountDaiToBorrowWei,
         deployer
     )
+    await getBorrowUserData(lendingPool, deployer)
+    await repay(
+        networkConfig[network.config.chainId].daiToken,
+        lendingPool,
+        amountDaiToBorrowWei,
+        deployer
+    )
+    await getBorrowUserData(lendingPool, deployer)
 }
 
 async function getLendingPool(account) {
@@ -104,6 +112,13 @@ async function borrowDai(daiAddress, lendingPool, amountDaiToBorrow, account) {
     )
     await borrowTx.wait(1)
     console.log("You've borrowed!")
+}
+
+async function repay(daiAddress, lendingPool, amount, account) {
+    await approveERC20(daiAddress, lendingPool.address, amount, account)
+    const repayTx = await lendingPool.repay(daiAddress, amount, 1, account)
+    await repayTx.wait(1)
+    console.log("Repaid!")
 }
 
 main()
