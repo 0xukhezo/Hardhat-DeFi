@@ -8,21 +8,37 @@ async function main() {
     const lendingPool = await getLendingPool(deployer)
     console.log(`Lending Pool address: ${lendingPool.address}`)
 
-    const wethTokenAddress = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-    await approveERC20(wethTokenAddress, lendingPool.address, AMOUNT, deployer)
+    await approveERC20(
+        networkConfig[network.config.chainId].wethToken,
+        lendingPool.address,
+        AMOUNT,
+        deployer
+    )
     console.log("Depositing...")
-    await lendingPool.deposit(wethTokenAddress, AMOUNT, deployer, 0)
+    await lendingPool.deposit(
+        networkConfig[network.config.chainId].wethToken,
+        AMOUNT,
+        deployer,
+        0
+    )
     console.log("Deposited!")
     let { availableBorrowsETH, totalDebtETH } = await getBorrowUserData(
         lendingPool,
         deployer
     )
-    const usdcPrice = await getUsdcPrice()
-    const amountUsdcToBorrow =
-        availableBorrowsETH.toString() * 0.95 * (1 / Number(usdcPrice))
-    console.log(`You can borrow ${amountUsdcToBorrow} USDC`)
-    const amountUsdcToBorrowWei = ethers.utils.parseEther(
-        amountUsdcToBorrow.toString()
+    const daiPrice = await getDaiPrice()
+    const amountDaiToBorrow =
+        availableBorrowsETH.toString() * 0.95 * (1 / Number(daiPrice))
+    console.log(`You can borrow ${amountDaiToBorrow} DAI`)
+
+    const amountDaiToBorrowWei = ethers.utils.parseEther(
+        amountDaiToBorrow.toString()
+    )
+    await borrowDai(
+        networkConfig[network.config.chainId].daiToken,
+        lendingPool,
+        amountDaiToBorrowWei,
+        deployer
     )
 }
 
@@ -68,15 +84,26 @@ async function getBorrowUserData(lendingPool, account) {
     return { availableBorrowsETH, totalDebtETH }
 }
 
-async function getUsdcPrice() {
-    const usdcEth = "0x986b5E1e1755e3C2440e960477f25201B0a8bbD4"
+async function getDaiPrice() {
     const daiEthPriceFeed = await ethers.getContractAt(
         "AggregatorV3Interface",
-        usdcEth
+        networkConfig[network.config.chainId].daiEthPriceFeed
     )
     const price = (await daiEthPriceFeed.latestRoundData())[1]
-    console.log(`The USDC ETH price is ${price.toString()}`)
+    console.log(`The DAI ETH price is ${price.toString()}`)
     return price
+}
+
+async function borrowDai(daiAddress, lendingPool, amountDaiToBorrow, account) {
+    const borrowTx = await lendingPool.borrow(
+        daiAddress,
+        amountDaiToBorrow,
+        1,
+        0,
+        account
+    )
+    await borrowTx.wait(1)
+    console.log("You've borrowed!")
 }
 
 main()
