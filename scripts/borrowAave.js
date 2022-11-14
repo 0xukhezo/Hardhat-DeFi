@@ -11,11 +11,11 @@ async function main() {
     console.log("Depositing WETH...")
     await lendingPool.deposit(wethTokenAddress, AMOUNT, deployer, 0)
     console.log("Desposited!")
-    // Getting your borrowing stats
+
     let { availableBorrowsETH } = await getBorrowUserData(lendingPool, deployer)
     const usdcPrice = await getUsdcPrice()
     const amountUsdcToBorrow =
-        availableBorrowsETH.toString() * 0.95 * (1 / usdcPrice.toNumber())
+        availableBorrowsETH.toString() * 0.9 * (1 / usdcPrice.toNumber())
     const amountUsdcToBorrowWei = ethers.utils.parseEther(
         amountUsdcToBorrow.toString()
     )

@@ -1,57 +1,17 @@
 const { ethers, getNamedAccounts, network } = require("hardhat")
-const { getWeth } = require("./getWeth.js")
-const {
-    Fetcher,
-    ChainId,
-    Route,
-    Trade,
-    TokenAmount,
-    TradeType,
-    Percent,
-    WETH,
-} = require("@uniswap/sdk")
+const { getWeth, AMOUNT } = require("./getWeth.js")
 const { networkConfig } = require("../helper-hardhat-config")
+const { getPoolImmutables } = require("../helpers/helpers")
 
-const chainId = ChainId.MAINNET
+require("dotenv").config()
 
 async function main() {
     await getWeth()
     const { deployer } = await getNamedAccounts()
-
-    const usdcToken = await Fetcher.fetchTokenData(
-        chainId,
-        networkConfig[network.config.chainId].usdcToken
-    )
-    const uniToken = await Fetcher.fetchTokenData(
-        chainId,
-        networkConfig[network.config.chainId].uniToken
-    )
-
-    const pair = await Fetcher.fetchPairData(usdcToken, uniToken)
-
-    const deadline = Math.floor(Date.now() / 1000) + 60 * 20
-
-    const route = new Route([pair], usdcToken)
-
-    const amountIn = ethers.utils.parseEther("10")
-
-    const trade = new Trade(
-        route,
-        new TokenAmount(usdcToken, amountIn.toString()),
-        TradeType.EXACT_INPUT
-    )
-
-    // const slippageTolerance = new Percent("50", "10000")
-    // const amountOutMin = trade.minimumAmountOut(slippageTolerance).raw
-    // const path = [
-    //     networkConfig[network.config.chainId].daiToken,
-    //     networkConfig[network.config.chainId].uniToken,
-    // ]
-    // const value = trade.inputAmount.raw[1].toString()
-
-    const uniswapContract = await ethers.getContractAt(
-        "IUniswapV2Router01",
-        networkConfig[network.config.chainId].liquidityPoolAddressesRouter
+    const liquidityPool = await getPool(
+        deployer,
+        networkConfig[network.config.chainId].usdcToken,
+        networkConfig[network.config.chainId].wethToken
     )
 
     const usdcContract = await ethers.getContractAt(
@@ -59,43 +19,75 @@ async function main() {
         networkConfig[network.config.chainId].usdcToken
     )
 
-    await usdcContract.approve(deployer, 100)
-    await usdcContract.increaseAllowance(deployer, 100)
+    const wethContract = await ethers.getContractAt(
+        "IERC20",
+        networkConfig[network.config.chainId].wethToken
+    )
 
-    const usdcBalance = await usdcContract.balanceOf(deployer)
-    console.log(usdcBalance.toString())
+    let wethBalance = await wethContract.balanceOf(deployer)
+    let usdcBalance = await usdcContract.balanceOf(deployer)
+
+    console.log(usdcBalance)
+    console.log(wethBalance)
+
+    await swapETH(AMOUNT, deployer, liquidityPool)
+
+    wethBalance = await wethContract.balanceOf(deployer)
+    usdcBalance = await usdcContract.balanceOf(deployer)
+
+    console.log(usdcBalance.toString() / 1000000)
+    console.log(wethBalance)
+}
+
+async function swapETH(inputAmount, deployer, poolAddress) {
+    const poolContract = await ethers.getContractAt(
+        "IUniswapV3Pool",
+        poolAddress,
+        deployer.address
+    )
+
+    const immutables = await getPoolImmutables(poolContract)
+
+    const swapRouterContract = await ethers.getContractAt(
+        "ISwapRouter",
+        networkConfig[network.config.chainId].swapRouterAddress,
+        deployer.address
+    )
+
+    const approvalAmount = (inputAmount / 2).toString()
+
+    const params = {
+        tokenIn: immutables.token1,
+        tokenOut: immutables.token0,
+        fee: immutables.fee,
+        recipient: deployer,
+        deadline: Math.floor(Date.now() / 1000) + 60 * 10,
+        amountIn: approvalAmount,
+        amountOutMinimum: 0,
+        sqrtPriceLimitX96: 0,
+    }
 
     await approveERC20(
-        networkConfig[network.config.chainId].daiToken,
-        uniswapContract.address,
-        (daiBalance.toString() / 2).toString(),
+        networkConfig[network.config.chainId].wethToken,
+        networkConfig[network.config.chainId].swapRouterAddress,
+        approvalAmount,
         deployer
     )
 
-    const swapTx = await uniswapContract.swapExactTokensForTokens(
-        usdcBalance.toString() / 2,
-        1,
-        path,
-        deployer,
-        deadline
+    await approveERC20(
+        networkConfig[network.config.chainId].usdcToken,
+        networkConfig[network.config.chainId].swapRouterAddress,
+        approvalAmount,
+        deployer
     )
 
-    await swapTx.wait(1)
-
-    // const addLiquidityTx = await uniswapContract.addLiquidity(
-    //     networkConfig[network.config.chainId].daiToken,
-    //     networkConfig[network.config.chainId].uniToken,
-    //     "10",
-    //     "1",
-    //     "1",
-    //     "1",
-    //     uniswapContract.address,
-    //     deadline
-    // )
-
-    // await addLiquidityTx.wait(1)
-
-    // console.log(addLiquidityTx)
+    await swapRouterContract
+        .exactInputSingle(params, {
+            gasLimit: ethers.utils.hexlify(1000000),
+        })
+        .then((tx) => {
+            console.log(tx)
+        })
 }
 
 async function approveERC20(
@@ -113,6 +105,17 @@ async function approveERC20(
     const tx = await erc20Token.approve(spenderAddress, amountToSpend)
     await tx.wait(1)
     console.log("Approved!")
+}
+
+async function getPool(deployer, address0, address1) {
+    const factoryContract = await ethers.getContractAt(
+        "IUniswapV3Factory",
+        networkConfig[network.config.chainId].factoryAddress,
+        deployer.address
+    )
+    const poolAddress = await factoryContract.getPool(address0, address1, 3000)
+    console.log("poolAddress", poolAddress)
+    return poolAddress
 }
 
 main()
