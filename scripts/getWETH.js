@@ -1,7 +1,7 @@
 const { ethers, getNamedAccounts, network } = require("hardhat")
 const { networkConfig } = require("../helper-hardhat-config")
 
-const AMOUNT = ethers.utils.parseEther("10")
+const AMOUNT = ethers.utils.parseEther("0.05")
 
 async function getWeth() {
     const { deployer } = await getNamedAccounts()
