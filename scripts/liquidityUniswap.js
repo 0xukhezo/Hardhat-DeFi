@@ -1,6 +1,13 @@
 const { ethers, getNamedAccounts, network } = require("hardhat")
 const { getWeth, AMOUNT } = require("./getWeth.js")
 const { networkConfig } = require("../helper-hardhat-config")
+const { Token } = require("@uniswap/sdk-core")
+const {
+    Pool,
+    Position,
+    TickMath,
+    nearestUsableTick,
+} = require("@uniswap/v3-sdk")
 const { getPoolImmutables } = require("../helpers/helpers")
 
 require("dotenv").config()
@@ -12,6 +19,12 @@ async function main() {
         deployer,
         networkConfig[network.config.chainId].usdcToken.address,
         networkConfig[network.config.chainId].wethToken.address
+    )
+
+    const poolContract = await ethers.getContractAt(
+        "IUniswapV3Pool",
+        liquidityPool,
+        deployer.address
     )
 
     const usdcContract = await ethers.getContractAt(
@@ -27,25 +40,31 @@ async function main() {
     let wethBalance = await wethContract.balanceOf(deployer)
     let usdcBalance = await usdcContract.balanceOf(deployer)
 
-    console.log(usdcBalance)
-    console.log(wethBalance)
+    console.log(usdcBalance.toString())
+    console.log(wethBalance.toString())
 
-    await swapETH(AMOUNT, deployer, liquidityPool)
+    console.log("Swapping...")
+
+    await swap(AMOUNT, deployer, poolContract)
 
     wethBalance = await wethContract.balanceOf(deployer)
     usdcBalance = await usdcContract.balanceOf(deployer)
 
-    console.log(usdcBalance.toString() / 1000000)
-    console.log(wethBalance)
+    console.log(usdcBalance.toString())
+    console.log(wethBalance.toString())
+
+    console.log("Adding liquidity...")
+
+    await addLiquidity(usdcBalance, wethBalance, deployer, poolContract)
+
+    wethBalance = await wethContract.balanceOf(deployer)
+    usdcBalance = await usdcContract.balanceOf(deployer)
+
+    console.log(usdcBalance.toString())
+    console.log(wethBalance.toString())
 }
 
-async function swapETH(inputAmount, deployer, poolAddress) {
-    const poolContract = await ethers.getContractAt(
-        "IUniswapV3Pool",
-        poolAddress,
-        deployer.address
-    )
-
+async function swap(inputAmount, deployer, poolContract) {
     const immutables = await getPoolImmutables(poolContract)
 
     const swapRouterContract = await ethers.getContractAt(
@@ -88,6 +107,7 @@ async function swapETH(inputAmount, deployer, poolAddress) {
         .then((tx) => {
             console.log(tx)
         })
+    console.log("Swaped!")
 }
 
 async function approveERC20(
@@ -135,64 +155,38 @@ async function getPoolData(poolContract) {
     }
 }
 
-const { Token, Price } = require("@uniswap/sdk-core")
-const {
-    Pool,
-    Position,
-    nearestUsableTick,
-    priceToClosestTick,
-} = require("@uniswap/v3-sdk")
-const {
-    abi: IUniswapV3PoolABI,
-} = require("@uniswap/v3-core/artifacts/contracts/interfaces/IUniswapV3Pool.sol/IUniswapV3Pool.json")
-const {
-    abi: INonfungiblePositionManagerABI,
-} = require("@uniswap/v3-periphery/artifacts/contracts/interfaces/INonfungiblePositionManager.sol/INonfungiblePositionManager.json")
-const ERC20ABI = require("../Abis/abiAddLiquidity.json")
-const {
-    chainId,
-    positionManagerAddress,
-    poolAddressWethUsdc,
-    WALLET_ADDRESS,
-    constantUSDC,
-    constantWETH,
-} = require("../../Constants/Constants")
+async function addLiquidity(
+    liquidityAmountToken0,
+    liquidityAmountToken1,
+    deployer,
+    poolContract
+) {
+    const nonFungiblePositionManagerContract = await ethers.getContractAt(
+        "INonFungiblePositionManager",
+        networkConfig[network.config.chainId].positionManagerAddress,
+        deployer.address
+    )
 
-require("dotenv").config()
-
-const UniToken = new Token(
-    chainId,
-    constantUSDC.address,
-    constantUSDC.decimals,
-    constantUSDC.symbol,
-    constantUSDC.name
-)
-const WethToken = new Token(
-    chainId,
-    constantWETH.address,
-    constantWETH.decimals,
-    constantWETH.symbol,
-    constantWETH.name
-)
-
-const nonFungiblePositionManagerContract = new ethers.Contract(
-    positionManagerAddress,
-    INonfungiblePositionManagerABI,
-    signer
-)
-const poolContract = new ethers.Contract(
-    poolAddressWethUsdc,
-    IUniswapV3PoolABI,
-    signer
-)
-
-async function addLiquidity(amountETH, ratio, upTickPrice, lowTickPrice) {
     const poolData = await getPoolData(poolContract)
-    const amountIn = amountETH * ratio
 
-    const WETH_UNI_POOL = new Pool(
+    const WethToken = new Token(
+        network.config.chainId,
+        networkConfig[network.config.chainId].wethToken.address,
+        networkConfig[network.config.chainId].wethToken.decimals,
+        networkConfig[network.config.chainId].wethToken.symbol,
+        networkConfig[network.config.chainId].wethToken.name
+    )
+    const UsdcToken = new Token(
+        network.config.chainId,
+        networkConfig[network.config.chainId].usdcToken.address,
+        networkConfig[network.config.chainId].usdcToken.decimals,
+        networkConfig[network.config.chainId].usdcToken.symbol,
+        networkConfig[network.config.chainId].usdcToken.name
+    )
+
+    const WETH_USDC_POOL = new Pool(
         WethToken,
-        UniToken,
+        UsdcToken,
         poolData.fee,
         poolData.sqrtPriceX96.toString(),
         poolData.liquidity.toString(),
@@ -200,7 +194,7 @@ async function addLiquidity(amountETH, ratio, upTickPrice, lowTickPrice) {
     )
 
     const position = new Position({
-        pool: WETH_UNI_POOL,
+        pool: WETH_USDC_POOL,
         liquidity: ethers.utils.parseUnits("0.01", 18),
         tickLower:
             nearestUsableTick(poolData.tick, poolData.tickSpacing) -
@@ -210,58 +204,38 @@ async function addLiquidity(amountETH, ratio, upTickPrice, lowTickPrice) {
             poolData.tickSpacing * 2,
     })
 
-    const approvalAmount = ethers.utils.parseUnits("10", 18).toString()
-    const tokenContract0 = new ethers.Contract(
-        UniToken.address,
-        ERC20ABI,
-        signer
+    await approveERC20(
+        networkConfig[network.config.chainId].usdcToken.address,
+        networkConfig[network.config.chainId].positionManagerAddress,
+        liquidityAmountToken0,
+        deployer
     )
-    await tokenContract0.approve(positionManagerAddress, approvalAmount)
-    const tokenContract1 = new ethers.Contract(
-        WethToken.address,
-        ERC20ABI,
-        signer
+
+    await approveERC20(
+        networkConfig[network.config.chainId].wethToken.address,
+        networkConfig[network.config.chainId].positionManagerAddress,
+        liquidityAmountToken1,
+        deployer
     )
-    await tokenContract1.approve(positionManagerAddress, approvalAmount)
 
     const { amount0: amount0Desired, amount1: amount1Desired } =
         position.mintAmounts
-    // mintAmountsWithSlippage
-
+    console.log(poolData)
     const params = {
-        token0: constantUSDC.address,
-        token1: constantWETH.address,
+        token0: networkConfig[network.config.chainId].usdcToken.address,
+        token1: networkConfig[network.config.chainId].wethToken.address,
         fee: poolData.fee,
-        tickLower: nearestUsableTick(
-            priceToClosestTick(
-                new Price(UniToken, WethToken, lowTickPrice, 1)
-            ) < 0
-                ? priceToClosestTick(
-                      new Price(UniToken, WethToken, upTickPrice, 1)
-                  )
-                : priceToClosestTick(
-                      new Price(UniToken, WethToken, lowTickPrice, 1)
-                  ),
-            poolData.tickSpacing
-        ),
-        tickUpper: nearestUsableTick(
-            priceToClosestTick(new Price(UniToken, WethToken, upTickPrice, 1)) <
-                0
-                ? priceToClosestTick(
-                      new Price(UniToken, WethToken, lowTickPrice, 1)
-                  )
-                : priceToClosestTick(
-                      new Price(UniToken, WethToken, upTickPrice, 1)
-                  ),
-            poolData.tickSpacing
-        ),
-        amount0Desired: ethers.utils.parseEther(amountIn.toString()).toString(),
-        amount1Desired: ethers.utils
-            .parseEther(amountETH.toString())
-            .toString(),
+        tickLower:
+            nearestUsableTick(poolData.tick, poolData.tickSpacing) -
+            poolData.tickSpacing * 2,
+        tickUpper:
+            nearestUsableTick(poolData.tick, poolData.tickSpacing) +
+            poolData.tickSpacing * 2,
+        amount0Desired: liquidityAmountToken0.toString(),
+        amount1Desired: liquidityAmountToken1.toString(),
         amount0Min: amount0Desired.toString(),
         amount1Min: amount1Desired.toString(),
-        recipient: WALLET_ADDRESS,
+        recipient: deployer,
         deadline: Math.floor(Date.now() / 1000) + 60 * 10,
     }
 
@@ -270,6 +244,7 @@ async function addLiquidity(amountETH, ratio, upTickPrice, lowTickPrice) {
         .then((tx) => {
             console.log(tx)
         })
+    console.log("Liquidity added!")
 }
 
 main()

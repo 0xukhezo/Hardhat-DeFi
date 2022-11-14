@@ -5,6 +5,7 @@ const networkConfig = {
             "0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5",
         swapRouterAddress: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
         factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+        positionManagerAddress: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
         daiEthPriceFeed: "0x773616E4d11A78F511299002da57A0a94577F1f4",
         usdcEthPriceFeed: "0x986b5E1e1755e3C2440e960477f25201B0a8bbD4",
         wethToken: {
