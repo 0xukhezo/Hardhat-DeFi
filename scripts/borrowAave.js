@@ -1,5 +1,5 @@
 const { ethers, getNamedAccounts, network } = require("hardhat")
-const { getWeth, AMOUNT } = require("../scripts/getWeth.js")
+const { getWeth, AMOUNT } = require("./getWeth.js")
 const { networkConfig } = require("../helper-hardhat-config")
 
 async function main() {

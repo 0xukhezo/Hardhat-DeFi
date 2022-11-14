@@ -15,11 +15,11 @@ interface IERC20 {
 
     function decimals() external view returns (uint8 decimalPlaces);
 
-    function decreaseApproval(address spender, uint256 subtractedValue)
+    function decreaseAllowance(address spender, uint256 subtractedValue)
         external
         returns (bool success);
 
-    function increaseApproval(address spender, uint256 addedValue)
+    function increaseAllowance(address spender, uint256 addedValue)
         external
         returns (bool success);
 
