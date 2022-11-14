@@ -6,7 +6,8 @@ async function main() {
     await getWeth()
     const { deployer } = await getNamedAccounts()
     const lendingPool = await getLendingPool(deployer)
-    const wethTokenAddress = networkConfig[network.config.chainId].wethToken
+    const wethTokenAddress =
+        networkConfig[network.config.chainId].wethToken.address
     await approveErc20(wethTokenAddress, lendingPool.address, AMOUNT, deployer)
     console.log("Depositing WETH...")
     await lendingPool.deposit(wethTokenAddress, AMOUNT, deployer, 0)
@@ -21,7 +22,7 @@ async function main() {
     )
     console.log(`You can borrow ${amountUsdcToBorrow.toString()} USDC`)
     await borrowUsdc(
-        networkConfig[network.config.chainId].usdcToken,
+        networkConfig[network.config.chainId].usdcToken.address,
         lendingPool,
         amountUsdcToBorrowWei,
         deployer
@@ -29,7 +30,7 @@ async function main() {
     await getBorrowUserData(lendingPool, deployer)
     await repay(
         amountUsdcToBorrowWei,
-        networkConfig[network.config.chainId].usdcToken,
+        networkConfig[network.config.chainId].usdcToken.address,
         lendingPool,
         deployer
     )
