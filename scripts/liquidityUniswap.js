@@ -1,13 +1,6 @@
 const { ethers, getNamedAccounts, network } = require("hardhat")
 const { getWeth, AMOUNT } = require("./getWeth.js")
 const { networkConfig } = require("../helper-hardhat-config")
-const { Token } = require("@uniswap/sdk-core")
-const {
-    Pool,
-    Position,
-    TickMath,
-    nearestUsableTick,
-} = require("@uniswap/v3-sdk")
 const { getPoolImmutables } = require("../helpers/helpers")
 
 require("dotenv").config()
@@ -15,17 +8,6 @@ require("dotenv").config()
 async function main() {
     await getWeth()
     const { deployer } = await getNamedAccounts()
-    const liquidityPool = await getPool(
-        deployer,
-        networkConfig[network.config.chainId].usdcToken.address,
-        networkConfig[network.config.chainId].wethToken.address
-    )
-
-    const poolContract = await ethers.getContractAt(
-        "IUniswapV3Pool",
-        liquidityPool,
-        deployer.address
-    )
 
     const usdcContract = await ethers.getContractAt(
         "IERC20",
@@ -37,34 +19,151 @@ async function main() {
         networkConfig[network.config.chainId].wethToken.address
     )
 
+    const uniContract = await ethers.getContractAt(
+        "IERC20",
+        networkConfig[network.config.chainId].uniToken.address
+    )
+
     let wethBalance = await wethContract.balanceOf(deployer)
     let usdcBalance = await usdcContract.balanceOf(deployer)
+    let uniBalance = await uniContract.balanceOf(deployer)
 
-    console.log("USDC balance...", usdcBalance.toString())
-    console.log("WETH balance...", wethBalance.toString())
+    console.log(
+        "WETH balance...",
+        ethers.utils.formatUnits(
+            wethBalance.toString(),
+            networkConfig[network.config.chainId].wethToken.decimals
+        )
+    )
+    console.log(
+        "USDC balance...",
+        ethers.utils.formatUnits(
+            usdcBalance.toString(),
+            networkConfig[network.config.chainId].usdcToken.decimals
+        )
+    )
+    console.log(
+        "UNI balance...",
+        ethers.utils.formatUnits(
+            uniBalance.toString(),
+            networkConfig[network.config.chainId].uniToken.decimals
+        )
+    )
 
     console.log("Swapping...")
 
-    await swap(AMOUNT, deployer, poolContract)
+    await swap(
+        AMOUNT,
+        deployer,
+        networkConfig[network.config.chainId].wethToken.address,
+        networkConfig[network.config.chainId].usdcToken.address
+    )
 
     wethBalance = await wethContract.balanceOf(deployer)
     usdcBalance = await usdcContract.balanceOf(deployer)
+    uniBalance = await uniContract.balanceOf(deployer)
 
-    console.log("USDC balance...", usdcBalance.toString())
-    console.log("WETH balance...", wethBalance.toString())
+    console.log(
+        "WETH balance...",
+        ethers.utils.formatUnits(
+            wethBalance.toString(),
+            networkConfig[network.config.chainId].wethToken.decimals
+        )
+    )
+    console.log(
+        "USDC balance...",
+        ethers.utils.formatUnits(
+            usdcBalance.toString(),
+            networkConfig[network.config.chainId].usdcToken.decimals
+        )
+    )
+    console.log(
+        "UNI balance...",
+        ethers.utils.formatUnits(
+            uniBalance.toString(),
+            networkConfig[network.config.chainId].uniToken.decimals
+        )
+    )
+
+    await swap(
+        usdcBalance,
+        deployer,
+        networkConfig[network.config.chainId].usdcToken.address,
+        networkConfig[network.config.chainId].uniToken.address
+    )
+
+    wethBalance = await wethContract.balanceOf(deployer)
+    usdcBalance = await usdcContract.balanceOf(deployer)
+    uniBalance = await uniContract.balanceOf(deployer)
+
+    console.log(
+        "WETH balance...",
+        ethers.utils.formatUnits(
+            wethBalance.toString(),
+            networkConfig[network.config.chainId].wethToken.decimals
+        )
+    )
+    console.log(
+        "USDC balance...",
+        ethers.utils.formatUnits(
+            usdcBalance.toString(),
+            networkConfig[network.config.chainId].usdcToken.decimals
+        )
+    )
+    console.log(
+        "UNI balance...",
+        ethers.utils.formatUnits(
+            uniBalance.toString(),
+            networkConfig[network.config.chainId].uniToken.decimals
+        )
+    )
 
     console.log("Adding liquidity...")
 
-    await addLiquidity(usdcBalance, wethBalance, deployer, poolContract)
+    await addLiquidity(
+        usdcBalance,
+        uniBalance,
+        deployer,
+        networkConfig[network.config.chainId].usdcToken.address,
+        networkConfig[network.config.chainId].uniToken.address
+    )
 
     wethBalance = await wethContract.balanceOf(deployer)
     usdcBalance = await usdcContract.balanceOf(deployer)
+    uniBalance = await uniContract.balanceOf(deployer)
 
-    console.log("USDC balance...", usdcBalance.toString())
-    console.log("WETH balance...", wethBalance.toString())
+    console.log(
+        "WETH balance...",
+        ethers.utils.formatUnits(
+            wethBalance.toString(),
+            networkConfig[network.config.chainId].wethToken.decimals
+        )
+    )
+    console.log(
+        "USDC balance...",
+        ethers.utils.formatUnits(
+            usdcBalance.toString(),
+            networkConfig[network.config.chainId].usdcToken.decimals
+        )
+    )
+    console.log(
+        "UNI balance...",
+        ethers.utils.formatUnits(
+            uniBalance.toString(),
+            networkConfig[network.config.chainId].uniToken.decimals
+        )
+    )
 }
 
-async function swap(inputAmount, deployer, poolContract) {
+async function swap(inputAmount, deployer, addressToken0, addressToken1) {
+    const liquidityPool = await getPool(deployer, addressToken0, addressToken1)
+
+    const poolContract = await ethers.getContractAt(
+        "IUniswapV3Pool",
+        liquidityPool,
+        deployer.address
+    )
+
     const immutables = await getPoolImmutables(poolContract)
 
     const swapRouterContract = await ethers.getContractAt(
@@ -73,7 +172,13 @@ async function swap(inputAmount, deployer, poolContract) {
         deployer.address
     )
 
-    const approvalAmount = (inputAmount / 2).toString()
+    let approvalAmount = (inputAmount / 2).toString()
+    if (
+        addressToken0 ===
+        networkConfig[network.config.chainId].wethToken.address
+    ) {
+        approvalAmount = inputAmount.toString()
+    }
 
     const params = {
         tokenIn: immutables.token1,
@@ -87,25 +192,26 @@ async function swap(inputAmount, deployer, poolContract) {
     }
 
     await approveERC20(
-        networkConfig[network.config.chainId].wethToken.address,
+        addressToken0,
         networkConfig[network.config.chainId].swapRouterAddress,
         approvalAmount,
         deployer
     )
 
     await approveERC20(
-        networkConfig[network.config.chainId].usdcToken.address,
+        addressToken1,
         networkConfig[network.config.chainId].swapRouterAddress,
         approvalAmount,
         deployer
     )
+    let response
 
     await swapRouterContract
         .exactInputSingle(params, {
             gasLimit: ethers.utils.hexlify(1000000),
         })
         .then((tx) => {
-            console.log(tx)
+            response = tx
         })
     console.log("Swaped!")
 }
@@ -159,7 +265,8 @@ async function addLiquidity(
     liquidityAmountToken0,
     liquidityAmountToken1,
     deployer,
-    poolContract
+    addressToken0,
+    addressToken1
 ) {
     const liquidityContract = await ethers.getContractAt(
         "IUniswapV2Router02",
@@ -168,23 +275,25 @@ async function addLiquidity(
     )
 
     await approveERC20(
-        networkConfig[network.config.chainId].usdcToken.address,
+        addressToken0,
         networkConfig[network.config.chainId].routerLiquidityAddress,
         liquidityAmountToken0,
         deployer
     )
 
     await approveERC20(
-        networkConfig[network.config.chainId].wethToken.address,
+        addressToken1,
         networkConfig[network.config.chainId].routerLiquidityAddress,
         liquidityAmountToken1,
         deployer
     )
 
+    let response
+
     await liquidityContract
         .addLiquidity(
-            networkConfig[network.config.chainId].usdcToken.address,
-            networkConfig[network.config.chainId].wethToken.address,
+            addressToken0,
+            addressToken1,
             liquidityAmountToken0.toString(),
             liquidityAmountToken1.toString(),
             1,
@@ -194,7 +303,7 @@ async function addLiquidity(
             { gasLimit: ethers.utils.hexlify(1000000) }
         )
         .then((tx) => {
-            console.log(tx)
+            response = tx
         })
 
     console.log("Liquidity added!")
