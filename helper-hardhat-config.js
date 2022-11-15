@@ -7,6 +7,7 @@ const networkConfig = {
         factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
         positionManagerAddress: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
         daiEthPriceFeed: "0x773616E4d11A78F511299002da57A0a94577F1f4",
+        routerLiquidityAddress: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
         usdcEthPriceFeed: "0x986b5E1e1755e3C2440e960477f25201B0a8bbD4",
         wethToken: {
             address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",

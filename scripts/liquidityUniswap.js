@@ -40,8 +40,8 @@ async function main() {
     let wethBalance = await wethContract.balanceOf(deployer)
     let usdcBalance = await usdcContract.balanceOf(deployer)
 
-    console.log(usdcBalance.toString())
-    console.log(wethBalance.toString())
+    console.log("USDC balance...", usdcBalance.toString())
+    console.log("WETH balance...", wethBalance.toString())
 
     console.log("Swapping...")
 
@@ -50,8 +50,8 @@ async function main() {
     wethBalance = await wethContract.balanceOf(deployer)
     usdcBalance = await usdcContract.balanceOf(deployer)
 
-    console.log(usdcBalance.toString())
-    console.log(wethBalance.toString())
+    console.log("USDC balance...", usdcBalance.toString())
+    console.log("WETH balance...", wethBalance.toString())
 
     console.log("Adding liquidity...")
 
@@ -60,8 +60,8 @@ async function main() {
     wethBalance = await wethContract.balanceOf(deployer)
     usdcBalance = await usdcContract.balanceOf(deployer)
 
-    console.log(usdcBalance.toString())
-    console.log(wethBalance.toString())
+    console.log("USDC balance...", usdcBalance.toString())
+    console.log("WETH balance...", wethBalance.toString())
 }
 
 async function swap(inputAmount, deployer, poolContract) {
@@ -138,22 +138,22 @@ async function getPool(deployer, address0, address1) {
     return poolAddress
 }
 
-async function getPoolData(poolContract) {
-    const [tickSpacing, fee, liquidity, slot0] = await Promise.all([
-        poolContract.tickSpacing(),
-        poolContract.fee(),
-        poolContract.liquidity(),
-        poolContract.slot0(),
-    ])
+// async function getPoolData(poolContract) {
+//     const [tickSpacing, fee, liquidity, slot0] = await Promise.all([
+//         poolContract.tickSpacing(),
+//         poolContract.fee(),
+//         poolContract.liquidity(),
+//         poolContract.slot0(),
+//     ])
 
-    return {
-        tickSpacing: tickSpacing,
-        fee: fee,
-        liquidity: liquidity,
-        sqrtPriceX96: slot0[0],
-        tick: slot0[1],
-    }
-}
+//     return {
+//         tickSpacing: tickSpacing,
+//         fee: fee,
+//         liquidity: liquidity,
+//         sqrtPriceX96: slot0[0],
+//         tick: slot0[1],
+//     }
+// }
 
 async function addLiquidity(
     liquidityAmountToken0,
@@ -161,89 +161,42 @@ async function addLiquidity(
     deployer,
     poolContract
 ) {
-    const nonFungiblePositionManagerContract = await ethers.getContractAt(
-        "INonFungiblePositionManager",
-        networkConfig[network.config.chainId].positionManagerAddress,
+    const liquidityContract = await ethers.getContractAt(
+        "IUniswapV2Router02",
+        networkConfig[network.config.chainId].routerLiquidityAddress,
         deployer.address
     )
 
-    const poolData = await getPoolData(poolContract)
-
-    const WethToken = new Token(
-        network.config.chainId,
-        networkConfig[network.config.chainId].wethToken.address,
-        networkConfig[network.config.chainId].wethToken.decimals,
-        networkConfig[network.config.chainId].wethToken.symbol,
-        networkConfig[network.config.chainId].wethToken.name
-    )
-    const UsdcToken = new Token(
-        network.config.chainId,
-        networkConfig[network.config.chainId].usdcToken.address,
-        networkConfig[network.config.chainId].usdcToken.decimals,
-        networkConfig[network.config.chainId].usdcToken.symbol,
-        networkConfig[network.config.chainId].usdcToken.name
-    )
-
-    const WETH_USDC_POOL = new Pool(
-        WethToken,
-        UsdcToken,
-        poolData.fee,
-        poolData.sqrtPriceX96.toString(),
-        poolData.liquidity.toString(),
-        poolData.tick
-    )
-
-    const position = new Position({
-        pool: WETH_USDC_POOL,
-        liquidity: ethers.utils.parseUnits("0.01", 18),
-        tickLower:
-            nearestUsableTick(poolData.tick, poolData.tickSpacing) -
-            poolData.tickSpacing * 2,
-        tickUpper:
-            nearestUsableTick(poolData.tick, poolData.tickSpacing) +
-            poolData.tickSpacing * 2,
-    })
-
     await approveERC20(
         networkConfig[network.config.chainId].usdcToken.address,
-        networkConfig[network.config.chainId].positionManagerAddress,
+        networkConfig[network.config.chainId].routerLiquidityAddress,
         liquidityAmountToken0,
         deployer
     )
 
     await approveERC20(
         networkConfig[network.config.chainId].wethToken.address,
-        networkConfig[network.config.chainId].positionManagerAddress,
+        networkConfig[network.config.chainId].routerLiquidityAddress,
         liquidityAmountToken1,
         deployer
     )
 
-    const { amount0: amount0Desired, amount1: amount1Desired } =
-        position.mintAmounts
-    console.log(poolData)
-    const params = {
-        token0: networkConfig[network.config.chainId].usdcToken.address,
-        token1: networkConfig[network.config.chainId].wethToken.address,
-        fee: poolData.fee,
-        tickLower:
-            nearestUsableTick(poolData.tick, poolData.tickSpacing) -
-            poolData.tickSpacing * 2,
-        tickUpper:
-            nearestUsableTick(poolData.tick, poolData.tickSpacing) +
-            poolData.tickSpacing * 2,
-        amount0Desired: liquidityAmountToken0.toString(),
-        amount1Desired: liquidityAmountToken1.toString(),
-        amount0Min: amount0Desired.toString(),
-        amount1Min: amount1Desired.toString(),
-        recipient: deployer,
-        deadline: Math.floor(Date.now() / 1000) + 60 * 10,
-    }
-
-    await nonFungiblePositionManagerContract
-        .mint(params, { gasLimit: ethers.utils.hexlify(1000000) })
+    await liquidityContract
+        .addLiquidity(
+            networkConfig[network.config.chainId].usdcToken.address,
+            networkConfig[network.config.chainId].wethToken.address,
+            liquidityAmountToken0.toString(),
+            liquidityAmountToken1.toString(),
+            1,
+            1,
+            deployer,
+            Math.floor(Date.now() / 1000) + 60 * 10,
+            { gasLimit: ethers.utils.hexlify(1000000) }
+        )
         .then((tx) => {
             console.log(tx)
         })
+
     console.log("Liquidity added!")
 }
 
